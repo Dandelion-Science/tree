@@ -20,7 +20,6 @@ limitations under the License.
 #include <unordered_map>
 
 // logging
-#include "absl/memory/memory.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include <pybind11/pybind11.h>
@@ -149,25 +148,25 @@ class CachedTypeCheck {
 
 py::object GetCollectionsSequenceType() {
   static py::object type =
-      py::module::import("collections.abc").attr("Sequence");
+      py::module_::import("collections.abc").attr("Sequence");
   return type;
 }
 
 py::object GetCollectionsMappingType() {
   static py::object type =
-      py::module::import("collections.abc").attr("Mapping");
+      py::module_::import("collections.abc").attr("Mapping");
   return type;
 }
 
 py::object GetCollectionsMappingViewType() {
   static py::object type =
-      py::module::import("collections.abc").attr("MappingView");
+      py::module_::import("collections.abc").attr("MappingView");
   return type;
 }
 
 py::object GetWraptObjectProxyTypeUncached() {
   try {
-    return py::module::import("wrapt").attr("ObjectProxy");
+    return py::module_::import("wrapt").attr("ObjectProxy");
   } catch (const py::error_already_set& e) {
     if (e.matches(PyExc_ImportError)) return py::none();
     throw e;
@@ -722,13 +721,13 @@ void AssertSameStructure(PyObject* o1, PyObject* o2, bool check_types) {
 
 ValueIteratorPtr GetValueIterator(PyObject* nested) {
   if (PyDict_Check(nested)) {
-    return absl::make_unique<DictValueIterator>(nested);
+    return std::make_unique<DictValueIterator>(nested);
   } else if (IsMappingHelper(nested)) {
-    return absl::make_unique<MappingValueIterator>(nested);
+    return std::make_unique<MappingValueIterator>(nested);
   } else if (IsAttrsHelper(nested)) {
-    return absl::make_unique<AttrsValueIterator>(nested);
+    return std::make_unique<AttrsValueIterator>(nested);
   } else {
-    return absl::make_unique<SequenceValueIterator>(nested);
+    return std::make_unique<SequenceValueIterator>(nested);
   }
 }
 
