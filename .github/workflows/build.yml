@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: [master]
   release:
-    types: [created]
+    types: [published]
   workflow_dispatch:
 
 jobs:
@@ -27,7 +27,7 @@ jobs:
         run: ls -lh dist/dm_tree*.tar.gz
         shell: bash
       - uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08  # v4.6.0
-        if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'release' && github.event.action == 'created') }}
+        if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'release' && github.event.action == 'published') }}
         with:
           name: dm-tree-sdist
           path: dist/dm_tree*.tar.gz
@@ -38,7 +38,6 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-24.04, macos-14, windows-2022]  # latest
-
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
         with:
@@ -71,7 +70,46 @@ jobs:
           CIBW_TEST_REQUIRES: pytest
           MAKEFLAGS: "-j$(nproc)"
       - uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08  # v4.6.0
-        if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'release' && github.event.action == 'created') }}
+        if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'release' && github.event.action == 'published') }}
         with:
           name: dm-tree-bdist-wheel-${{ matrix.os }}-${{ strategy.job-index }}
           path: wheelhouse/*.whl
+
+  publish:
+    if: ${{ github.repository == 'Dandelion-Science/tree' && github.event_name == 'release' }}
+    needs: [sdist, bdist-wheel]
+    permissions:
+      id-token: write
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-region: ${{ vars.AWS_REGION }}
+          role-to-assume: ${{ vars.ARN_IAM_ROLE_GHA_CORE }}
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dm-tree-*
+          merge-multiple: true
+          path: dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
+          tag_name: ${{ github.event.release.tag_name }}
+      - name: Get CodeArtifact authorization token
+        run: |
+          AWS_CODEARTIFACT_TOKEN=$(aws codeartifact get-authorization-token \
+            --domain ${{ vars.CODEARTIFACT_DOMAIN }} \
+            --domain-owner ${{ vars.CODEARTIFACT_DOMAIN_OWNER }} \
+            --query authorizationToken \
+            --output text)
+          echo "AWS_CODEARTIFACT_TOKEN=$AWS_CODEARTIFACT_TOKEN" >> $GITHUB_ENV
+      - uses: astral-sh/setup-uv@v7
+      - run: uv publish
+        env:
+          UV_PUBLISH_USERNAME: aws
+          UV_PUBLISH_PASSWORD: ${{ env.AWS_CODEARTIFACT_TOKEN }}
+          UV_PUBLISH_URL: ${{ vars.CODEARTIFACT_PYPI_STORE_REPOSITORY_URL }}
