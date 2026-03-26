@@ -15,7 +15,9 @@ limitations under the License.
 #include "tree.h"
 
 #include <functional>
+#include <atomic>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 
@@ -49,7 +51,7 @@ using PyObjectPtr = std::unique_ptr<PyObject, DecrementsPyRefcount>;
 
 const int kMaxItemsInCache = 1024;
 
-bool WarnedThatSetIsNotSequence = false;
+std::atomic<bool> WarnedThatSetIsNotSequence{false};
 
 bool IsString(PyObject* o) {
   return PyBytes_Check(o) || PyByteArray_Check(o) || PyUnicode_Check(o);
@@ -113,6 +115,7 @@ class CachedTypeCheck {
     auto* type = Py_TYPE(o);
 
     {
+      std::lock_guard<std::mutex> lock(mutex_);
       auto it = type_to_sequence_map_.find(type);
       if (it != type_to_sequence_map_.end()) {
         return it->second;
@@ -132,6 +135,7 @@ class CachedTypeCheck {
     // that are eligible for decref. As a precaution, we limit the size of the
     // map to 1024.
     {
+      std::lock_guard<std::mutex> lock(mutex_);
       if (type_to_sequence_map_.size() < kMaxItemsInCache) {
         Py_INCREF(type);
         type_to_sequence_map_.insert({type, check_result});
@@ -144,6 +148,7 @@ class CachedTypeCheck {
  private:
   std::function<int(PyObject*)> ternary_predicate_;
   std::unordered_map<PyTypeObject*, bool> type_to_sequence_map_;
+  mutable std::mutex mutex_;
 };
 
 py::object GetCollectionsSequenceType() {
