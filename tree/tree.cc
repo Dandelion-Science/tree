@@ -740,7 +740,7 @@ inline py::object pyo_or_throw(PyObject* ptr) {
   return py::reinterpret_steal<py::object>(ptr);
 }
 
-PYBIND11_MODULE(_tree, m) {
+PYBIND11_MODULE(_tree, m, py::mod_gil_not_used()) {
   // Resolve `wrapt.ObjectProxy` at import time to avoid doing
   // imports during function calls.
   tree::GetWraptObjectProxyType();
